@@ -3,3 +3,6 @@ __pycache__/
 *.db
 .env
 artifacts/
+.workbuddy/
+feeds/feed-cn-forums.json
+content/2026-09-21-test-digest.md

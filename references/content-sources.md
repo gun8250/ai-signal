@@ -2,6 +2,53 @@
 
 Central feed is updated daily at 6am Beijing time (UTC 22:00) with:
 
+### CN investor forums (subscriber-side local source, not central)
+`generate_cn_forums.py` runs locally before `prepare_digest.py` and writes
+`feeds/feed-cn-forums.json`. Sources and anti-bot notes:
+
+- **NGA 杂谈 (fid=510567, 大时代话题集合)** — guest access blocked by a JS
+  challenge; the cookie value is embedded in the 403 body's script, extracted
+  and retried with `&rand=` plus cleared `lastpath`/`ngaPassportUid` cookies.
+  A `Referer: https://bbs.nga.cn/` header is required.
+- **集思录** — `/explore/` is a server-rendered stream sorted by last activity;
+  plain GET works. (The `/topic/{category}` pages sort by all-time hotness and
+  mostly surface old threads — not used.)
+- **虎扑股票区** (`bbs.hupu.com/stock`) — server-rendered list page, plain GET.
+- **雪球** (`xueqiu.com`) — hardest of the four. Main domain sits behind an
+  Aliyun WAF: a 75KB obfuscated JS challenge plus a per-URL `md5__1038`
+  signature parameter, and the app layer needs `xq_a_token` cookies (seeded by
+  GET `/about`). Cookie reuse across requests does NOT work (signature is
+  per-URL), so the only stable channel is a real browser: `xueqiu_fetch.mjs`
+  (playwright-core + system Edge/Chrome, headless) warms up on `/about`, lets
+  the challenge self-solve, then same-origin `fetch()`es the search API
+  `/query/v1/search/status.json?q=<kw>&sort=time` per keyword. Quotes APIs on
+  `stock.xueqiu.com` do not sit behind the WAF but carry no discussions.
+  Falls back gracefully: if node/playwright/browser is missing, the xueqiu
+  board reports an error and the other three boards still ship.
+  **Hot-list caveat (found 2026-09-21):** `statuses/hot/listV2.json` rows can
+  pair one post's id/target with ANOTHER post's title/description (server-side
+  field mismatch). The collector therefore canonicalizes every hot item via
+  `statuses/show.json?id=<id>` in the same browser session before emitting it.
+
+Filtering (mirrors the central Twitter tier philosophy): theme keyword gates
+for commodities / cyclicals / value investing, a hard exclude list for ads /
+recruitment / emotional spam, standing mega-thread patterns (超短楼/技术分析
+大楼) dropped, engagement floors (NGA ≥5 replies, jisilu/hupu ≥3 replies or
+≥500 views, xueqiu like+2×reply ≥10), and a 14-day activity window. Threads
+are ranked by the communities' own voting (replies + views/100).
+
+**当日热榜 (per-board hot TOP5, grouped)**: besides theme-filtered topics,
+each board reports its own hot list (NGA by replies, jisilu homepage 热门
+block, hupu `/stock-hot` = the site's 24h rank, xueqiu
+`statuses/hot/listV2.json`). The feed keeps them **grouped per board** in
+`hot_boards: [{source, source_name, board_label, items}]` with per-board
+`hot_rank` — NO cross-board merging or scoring, because the heat metrics are
+not comparable (NGA/jisilu/hupu numbers are all-time accumulated replies;
+xueqiu's hot list only carries a few hours of same-day likes/replies).
+Guards: standing mega-threads with >3000 replies are dropped; xueqiu items
+need like+reply+retweet ≥10 and use the post text head as title (hot posts
+often carry no title field). Cap per board is `--hot-per-board` (default 5).
+
 ### Podcasts (14 channels)
 Dwarkesh Patel, Lex Fridman, Latent Space, All-In Podcast, a16z, Naval, No Priors,
 SemiAnalysis (Dylan Patel), Google DeepMind, Y Combinator Startup Podcast, Lenny's Podcast,

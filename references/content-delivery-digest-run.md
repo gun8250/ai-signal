@@ -16,8 +16,26 @@ Read `~/.ai-signal/config.json` for user preferences.
 ### Step 2: Run prepare script
 
 ```bash
+cd ${SKILL_DIR}/scripts && python generate_cn_forums.py 2>/dev/null
 cd ${SKILL_DIR}/scripts && python prepare_digest.py 2>/dev/null
 ```
+
+`generate_cn_forums.py` is a subscriber-side local source. It fetches four
+Chinese investor communities (NGA 杂谈/大时代 board, 集思录 /explore stream,
+虎扑股票区, 雪球 keyword search) and writes `feeds/feed-cn-forums.json` with
+theme filtering for commodities / cyclicals / value investing. It solves NGA's
+guestJs JS-challenge automatically; xueqiu runs through a real-browser
+collector (`xueqiu_fetch.mjs`, needs the managed node runtime + system
+Edge/Chrome + playwright-core in the node workspace) and tolerates individual
+board failures (a failed board is reported in the feed's `errors` field,
+others still get fetched). Since 2026-09-22 the generator rotates content:
+topics already delivered in past digests (tracked in `~/.ai-signal/seen.json`)
+are skipped and the next candidate in line is promoted; when a board's fresh
+pool runs dry, a low-engagement backfill pool (same topic/time gates) tops it
+up to a floor of 5 items — so each board serves fresh content every day. If
+it fails entirely, `prepare_digest.py` still
+runs — the CN forums section is simply absent that
+day; do not block the digest on it.
 
 The script writes the full content to files and prints a **small JSON manifest**
 to stdout (a few KB — safe to read in any agent). The manifest contains:
@@ -92,6 +110,7 @@ Use the raw JSON fields as the source of truth:
   first-pass preview, not a full-transcript analysis.
 - Papers: use each paper's `title`, `published`, `abstract`, `abs_url`, and `pdf_url`.
 - Official blogs: use each article's `source_name`, `title`, `summary`, and `url`.
+- CN forums: use each topic's `source_name`, `title`, `replies`, `views`, `published`, `theme`, and `url`.
 - If `central_summaries` exists, treat it only as optional reference material,
   not as the canonical source.
 
@@ -175,6 +194,38 @@ Chinese output, use wording like: "想深读的话，可以直接说：展开第
 For each article in `articles`, follow `prompts.summarize_articles`. These are
 first-party announcements from Anthropic / OpenAI / Google DeepMind — present
 them as the company's own claims. Every article MUST include its `url`.
+
+**CN forums (process between blogs and papers):**
+If `cn_forums` is non-empty, add a section 「国内论坛精选」. These are retail /
+pro-investor discussions from NGA 大时代, 集思录, 虎扑股票区, and 雪球, filtered
+for commodities / cyclicals / value-investing themes. Present each topic with its
+`source_name`, `title`, `replies`/`views` as community heat, `published` time,
+and `url`. Treat forum content as **community opinions for inspiration**, not
+verified facts — attribute clearly ("NGA 网友讨论…"). Do not visit the URLs;
+summarize from title and metadata only. If a topic's `theme` is known
+(commodities / cyclical / value), mention it. When `cn_forums` is empty, skip
+the section silently.
+
+**AI 一线 section volume (user preference, 2026-09-21):** the AI/podcast
+section must keep its FULL standard structure — one preview block per
+selected episode (title link, pub time, 3-5 sentence preview from its
+description), tweets with original text preserved under an "原文" label,
+and an explicit arXiv/blog status line. Do NOT compress it to a one-line
+bullet list even when most episodes are event noise; filter the noise, keep
+the depth for what remains.
+
+**当日热榜·每站 TOP5 (first, inside the CN forums section):**
+Items with `hot: true` carry a per-board `hot_rank` — each forum's OWN top 5,
+grouped by `source` (the feed's `hot_boards` structure; manifest lists them
+grouped: 虎扑 → 集思录 → NGA → 雪球). They are intentionally NOT
+theme-filtered (the user asked for full-site 视野). Heat metrics are NOT
+comparable across boards (accumulated replies for NGA/jisilu/hupu vs
+same-day likes for xueqiu) — never rank them against each other or merge
+into one list. Render a sub-section 「今日论坛热榜」 at the TOP of
+「国内论坛精选」 with one table/list per forum (four small groups), each
+item: per-board rank, title, heat, url, and — for off-topic ones — one short
+clause on why it's buzzing. Skip standing-thread-looking titles. If a board
+has no hot items, skip that group silently.
 
 **Papers (process fourth):**
 For each arXiv paper, summarize according to granularity:

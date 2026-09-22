@@ -209,8 +209,9 @@ class DigestDedupTests(unittest.TestCase):
         articles = [{"id": "blog-1"}, {"id": "blog-1"}]
         seen = {"tweets": {}, "episodes": {}, "papers": {}, "articles": {}}
 
-        accounts, episodes, fresh_papers, fresh_articles, marks = prepare_digest.filter_unseen(
-            feed_x, feed_podcasts, papers, articles, seen
+        accounts, episodes, fresh_papers, fresh_articles, marks, fresh_cn_forums = prepare_digest.filter_unseen(
+            feed_x, feed_podcasts, papers, articles, seen,
+            [{"id": "nga:1"}, {"id": "nga:1"}, {"id": "hupu:2"}],
         )
 
         self.assertEqual([[tweet.get("id") for tweet in a["tweets"]] for a in accounts],
@@ -220,6 +221,8 @@ class DigestDedupTests(unittest.TestCase):
         self.assertEqual(len(fresh_articles), 1)
         self.assertEqual(set(marks["tweets"]), {"tweet-1", "tweet-2"})
         self.assertEqual(set(marks["episodes"]), {"episode-1"})
+        self.assertEqual([t["id"] for t in fresh_cn_forums], ["nga:1", "hupu:2"])
+        self.assertEqual(set(marks["cn_forums"]), {"nga:1", "hupu:2"})
 
 
 class FeedValidationTests(unittest.TestCase):
